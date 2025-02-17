@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Response, status
+from fastapi import FastAPI, Response, status, HTTPException
 from fastapi.params import Body
 
 from pydantic import BaseModel
@@ -38,7 +38,7 @@ async def root():
 
 
 @app.get('/post/')
-async def payload(payload: dict=Body(None)):
+async def payload():
     print(payload,'---------')
     # return {"DATA":'teststst',"status":200,'message':'success','data':payload.get('time')}
     return {"posts":dummy_posts}
@@ -46,7 +46,7 @@ async def payload(payload: dict=Body(None)):
 
 
 
-@app.post('/post/')
+@app.post('/post/',status_code=201)
 async def createpost(post: Post):
     print(post,'---------')
     post=post.dict()
@@ -70,13 +70,17 @@ async def get_post(id: int, response: Response):
     try:
         post=find_post(id)
         if post is None:
-            response.status_code = status.HTTP_404_NOT_FOUND
-            return {"DATA":'UNDEFINED',"status":404,'message':'not found','data':"SORRY NOT FOUND"} 
+            # response.status_code = status.HTTP_404_NOT_FOUND
+            raise HTTPException(status_code=404, detail="Item not found")
+            # return {"DATA":'UNDEFINED',"status":404,'message':'not found','data':"SORRY NOT FOUND"} 
             
         return {"DATA":'teststst',"status":200,'message':'success','data':post}
     except Exception as e:
+
         print('ERROR== :',e)
-        return {"DATA":'teststst',"status":500,'message':'error','data':None}
+        raise HTTPException(status_code=404, detail="Item not found")
+        
+        # return {"DATA":'teststst',"status":500,'message':'error','data':None}
 
 
 
@@ -94,3 +98,33 @@ def find_post(id):
 def get_latest_posts():
     latest_posts = dummy_posts[-1:-4:-1]
     return {"DATA":'teststst',"status":200,'message':'success','data':latest_posts}
+
+
+
+
+@app.delete('/post/{id}',status_code=204)
+def delete_post(id: int):
+    print(id,'---------')
+    post=find_post(id)
+    if post is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+        # return {"DATA":'UNDEFINED',"status":404,'message':'not found','data':"SORRY NOT FOUND"} 
+    dummy_posts.remove(post)
+    return Response(status_code=204)
+    # return {"DATA":'teststst',"statu   s":200,'message':'successfylly deleted Item with id:'+str(id),'data':dummy_posts}
+
+
+@app.put('/post/{id}')
+def update_post(id: int, post: Post):
+    print(id,'---------')
+    # post=post.dict()
+    posst = find_post(id)
+    if posst is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    posst['title'] = post.title
+    posst['content'] = post.content
+    posst['age'] = post.age
+    posst['time'] = post.time
+    posst['opt'] = post.opt
+    return {"DATA":'teststst',"status":200,'message':'success','data':posst}

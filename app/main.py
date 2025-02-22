@@ -7,10 +7,33 @@ from typing import Optional
 from random import randrange
 
 
+import psycopg2
+# from psycopg2 import Error, RealDictCursor
+
+import time
+
 
 
 
 app = FastAPI()
+
+
+while True:
+    try:
+        conn = psycopg2.connect(
+            host="localhost",
+            database="fastapi",
+            user="postgres",
+            password="root",
+            port=5432,
+        )
+        cursor = conn.cursor()
+        print("Connected to the database")
+        break
+    except Exception as e:
+        print("Error connecting to the database:", e)
+    time.sleep(2)
+
 
 
 
@@ -19,7 +42,7 @@ class Post(BaseModel):
     content: str
     age: int
     time: str = None
-    opt: Optional[int] = None
+    
 
 
 
@@ -39,28 +62,45 @@ async def root():
 
 @app.get('/post/')
 async def payload():
-    print(payload,'---------')
-    # return {"DATA":'teststst',"status":200,'message':'success','data':payload.get('time')}
-    return {"posts":dummy_posts}
+    try:
+        print(payload,'---------')
+        # return {"DATA":'teststst',"status":200,'message':'success','data':payload.get('time')}
+
+        cursor.execute("SELECT * FROM posts")
+        posts = cursor.fetchall()
+
+        print(posts,'---------')
+
+        return {"posts":posts}
+    except Exception as e:
+        print("error------->>>> ",e)
+        return {"posts":e}
 
 
 
 
+# USING DATABASE POST
 @app.post('/post/',status_code=201)
 async def createpost(post: Post):
-    print(post,'---------')
-    post=post.dict()
-    post['id']=randrange(1,100)
-    dummy_posts.append(post)
+    try:
+        print(post,'---------')
+        
+        cursor.execute("INSERT INTO posts (title, content) VALUES (%s, %s) RETURNING *", (post.title, post.content))
+        conn.commit()
+        post=cursor.fetchone()
+        print(post,'---------')
+        conn.commit()
+
+        cursor.execute("SELECT * FROM posts")
+        posts = cursor.fetchall()
 
 
-    return {"DATA":'teststst',"status":200,'message':'success','dataa':dummy_posts}
+        return {"DATA":'teststst',"status":200,'message':'success','dataa':posts} 
+    except Exception as e:
+        print(e)
+        return {"DATA":'teststst',"status":500,'message':'error','dataa':e}
 
 
-# @app.get('/post/{id}')
-# async def get_post(id: int):
-#     print(id,'---------')
-#     return {"DATA":'teststst',"status":200,'message':'success','data':dummy_posts[id]}
 
 
 @app.get('/post/{id}')
@@ -68,19 +108,16 @@ async def get_post(id: int, response: Response):
     print(id,'---------')
 
     try:
-        post=find_post(id)
+        cursor.execute("SELECT * FROM posts WHERE id = %s", (id,))
+        post = cursor.fetchone()
+        print(post,'---------')
         if post is None:
-            # response.status_code = status.HTTP_404_NOT_FOUND
             raise HTTPException(status_code=404, detail="Item not found")
-            # return {"DATA":'UNDEFINED',"status":404,'message':'not found','data':"SORRY NOT FOUND"} 
-            
         return {"DATA":'teststst',"status":200,'message':'success','data':post}
     except Exception as e:
+        print(e)
+        return {"DATA":'teststst',"status":500,'message':'error','dataa':e}   
 
-        print('ERROR== :',e)
-        raise HTTPException(status_code=404, detail="Item not found")
-        
-        # return {"DATA":'teststst',"status":500,'message':'error','data':None}
 
 
 
@@ -105,26 +142,57 @@ def get_latest_posts():
 @app.delete('/post/{id}',status_code=204)
 def delete_post(id: int):
     print(id,'---------')
-    post=find_post(id)
-    if post is None:
+    try:
+        cursor.execute("DELETE FROM posts WHERE id = %s returning *", (id,))
+        deleted_post = cursor.fetchone()
+        print(deleted_post,'---------')
+        conn.commit()
+
+        if deleted_post is None:
+            raise HTTPException(status_code=404, detail="Item not found")
+            
+        return {"DATA":'teststst',"status":200,'message':'success','data':deleted_post}
+    except Exception as e:
+        print("ERROR== :",e)
         raise HTTPException(status_code=404, detail="Item not found")
-        # return {"DATA":'UNDEFINED',"status":404,'message':'not found','data':"SORRY NOT FOUND"} 
-    dummy_posts.remove(post)
-    return Response(status_code=204)
-    # return {"DATA":'teststst',"statu   s":200,'message':'successfylly deleted Item with id:'+str(id),'data':dummy_posts}
+
+
 
 
 @app.put('/post/{id}')
 def update_post(id: int, post: Post):
     print(id,'---------')
-    # post=post.dict()
-    posst = find_post(id)
-    if posst is None:
-        raise HTTPException(status_code=404, detail="Item not found")
     
-    posst['title'] = post.title
-    posst['content'] = post.content
-    posst['age'] = post.age
-    posst['time'] = post.time
-    posst['opt'] = post.opt
-    return {"DATA":'teststst',"status":200,'message':'success','data':posst}
+    try:
+        cursor.execute("UPDATE posts SET title = %s, content = %s WHERE id = %s returning *", (post.title, post.content, id)) 
+        conn.commit()
+        post=cursor.fetchone()
+        print(post,'---------')
+        if post is None:
+            raise HTTPException(status_code=404, detail="Item not found")
+            
+        return {"DATA":'teststst',"status":200,'message':'success','data':post}
+    except Exception as e:
+        print(e)
+        return {"DATA":'teststst',"status":500,'message':'error','dataa':e}
+
+
+
+
+
+
+# @app.put('/post/{id}')
+# def update_post(id: int, post: Post):
+#     print(id,'---------')
+#     # post=post.dict()
+#     posst = find_post(id)
+#     if posst is None:
+#         raise HTTPException(status_code=404, detail="Item not found")
+    
+#     posst['title'] = post.title
+#     posst['content'] = post.content
+#     posst['age'] = post.age
+#     posst['time'] = post.time
+#     posst['opt'] = post.opt
+#     return {"DATA":'teststst',"status":200,'message':'success','data':posst}
+

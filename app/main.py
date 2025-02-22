@@ -1,3 +1,4 @@
+
 from fastapi import FastAPI, Response, status, HTTPException
 from fastapi.params import Body
 
@@ -12,10 +13,24 @@ import psycopg2
 
 import time
 
+from . import models
+from . import database
+from .database import SessionLocal, engine
 
 
+
+models.Base.metadata.create_all(bind=engine)  
 
 app = FastAPI()
+
+
+# Dependency
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 while True:

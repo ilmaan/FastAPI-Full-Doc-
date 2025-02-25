@@ -12,25 +12,20 @@ import psycopg2
 # from psycopg2 import Error, RealDictCursor
 
 import time
+from datetime import datetime
 
 from . import models
 from . import database
-from .database import SessionLocal, engine
+from .database import SessionLocal, engine, get_db
+from sqlalchemy.orm import Session
+from fastapi import Depends
+
 
 
 
 models.Base.metadata.create_all(bind=engine)  
 
 app = FastAPI()
-
-
-# Dependency
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 while True:
@@ -55,8 +50,8 @@ while True:
 class Post(BaseModel):
     title: str
     content: str
-    age: int
-    time: str = None
+    published: bool = True
+    created_at: Optional[datetime] = None
     
 
 
@@ -70,20 +65,33 @@ dummy_posts = [
          {"id":3,"title": "title3", "content": "content3", "age": 3, "time": "time3"}]
 
 
+
+
+@app.get('/sqlalchemy')
+async def sqlalchemy(db: Session = Depends(get_db)):
+    posts = db.query(models.NewPost).all()
+    print(posts)
+
+    return {"message": "Hello World-------ss","posts":posts}
+
+
+
 @app.get("/")
 async def root():
     return {"message": "Hello Worldss"}
 
 
 @app.get('/post/')
-async def payload():
+async def payload(db: Session = Depends(get_db)):
     try:
         print(payload,'---------')
         # return {"DATA":'teststst',"status":200,'message':'success','data':payload.get('time')}
 
-        cursor.execute("SELECT * FROM posts")
-        posts = cursor.fetchall()
+        # cursor.execute("SELECT * FROM posts")
+        # posts = cursor.fetchall()
 
+        posts = db.query(models.NewPost).all()
+        
         print(posts,'---------')
 
         return {"posts":posts}
@@ -96,21 +104,32 @@ async def payload():
 
 # USING DATABASE POST
 @app.post('/post/',status_code=201)
-async def createpost(post: Post):
+async def createpost(post: Post,db: Session = Depends(get_db)):
     try:
         print(post,'---------')
         
-        cursor.execute("INSERT INTO posts (title, content) VALUES (%s, %s) RETURNING *", (post.title, post.content))
-        conn.commit()
-        post=cursor.fetchone()
-        print(post,'---------')
-        conn.commit()
+        # cursor.execute("INSERT INTO posts (title, content) VALUES (%s, %s) RETURNING *", (post.title, post.content))
+        # conn.commit()
+        # post=cursor.fetchone()
+        # print(post,'---------')
+        # conn.commit()
 
-        cursor.execute("SELECT * FROM posts")
-        posts = cursor.fetchall()
+        
+
+        # new_post = models.NewPost(title=post.title, content=post.content,published=True)
+        new_post = models.NewPost(**post.dict())
+        db.add(new_post)
+        db.commit()
+        db.refresh(new_post)
+
+        return {"DATA":'teststst',"status":200,'message':'success','dataa':new_post}
 
 
-        return {"DATA":'teststst',"status":200,'message':'success','dataa':posts} 
+        # cursor.execute("SELECT * FROM posts")
+        # posts = cursor.fetchall()
+
+
+        # return {"DATA":'teststst',"status":200,'message':'success','dataa':posts} 
     except Exception as e:
         print(e)
         return {"DATA":'teststst',"status":500,'message':'error','dataa':e}
@@ -119,13 +138,16 @@ async def createpost(post: Post):
 
 
 @app.get('/post/{id}')
-async def get_post(id: int, response: Response):
+async def get_post(id: int, response: Response,db: Session = Depends(get_db)):
     print(id,'---------')
 
     try:
-        cursor.execute("SELECT * FROM posts WHERE id = %s", (id,))
-        post = cursor.fetchone()
+        post = db.query(models.NewPost).filter(models.NewPost.id == id).first()
         print(post,'---------')
+        
+        # cursor.execute("SELECT * FROM posts WHERE id = %s", (id,))
+        # post = cursor.fetchone()
+        # print(post,'---------')
         if post is None:
             raise HTTPException(status_code=404, detail="Item not found")
         return {"DATA":'teststst',"status":200,'message':'success','data':post}
@@ -154,19 +176,32 @@ def get_latest_posts():
 
 
 
-@app.delete('/post/{id}',status_code=204)
-def delete_post(id: int):
+@app.delete('/post/{id}')
+def delete_post(id: int,db: Session = Depends(get_db)):
     print(id,'---------')
     try:
-        cursor.execute("DELETE FROM posts WHERE id = %s returning *", (id,))
-        deleted_post = cursor.fetchone()
-        print(deleted_post,'---------')
-        conn.commit()
+        deleted_post = db.query(models.NewPost).filter(models.NewPost.id == id)
+        print(deleted_post,'---------',"deleted_post-----------") 
 
-        if deleted_post is None:
+        if deleted_post.first() is None:  # Check if the post exists
             raise HTTPException(status_code=404, detail="Item not found")
+
+        deleted_post.delete(synchronize_session=False)
+        db.commit()
+        # db.refresh(deleted_post)
+
+
+        
+        # cursor.execute("DELETE FROM posts WHERE id = %s returning *", (id,))
+        # deleted_post = cursor.fetchone()
+        # print(deleted_post,'---------')
+        # conn.commit()
+
+        # if deleted_post is None:
+        #     print("deleted_post is None")
+        #     raise HTTPException(status_code=404, detail="Item not found")
             
-        return {"DATA":'teststst',"status":200,'message':'success','data':deleted_post}
+        return {"DATA":'teststst',"status":204,'message':'successfully deeted','id':id}
     except Exception as e:
         print("ERROR== :",e)
         raise HTTPException(status_code=404, detail="Item not found")
@@ -175,13 +210,27 @@ def delete_post(id: int):
 
 
 @app.put('/post/{id}')
-def update_post(id: int, post: Post):
+def update_post(id: int, update_post: Post,db: Session = Depends(get_db)):
     print(id,'---------')
     
     try:
-        cursor.execute("UPDATE posts SET title = %s, content = %s WHERE id = %s returning *", (post.title, post.content, id)) 
-        conn.commit()
-        post=cursor.fetchone()
+        post = db.query(models.NewPost).filter(models.NewPost.id == id).first()
+        print(post,'---------')
+        if post is None:
+            raise HTTPException(status_code=404, detail="Item not found")
+        
+        # Update the attributes of the post object directly
+        for key, value in update_post.dict().items():
+            setattr(post, key, value)
+
+
+
+        db.commit()
+        
+        
+        # cursor.execute("UPDATE posts SET title = %s, content = %s WHERE id = %s returning *", (post.title, post.content, id)) 
+        # conn.commit()
+        # post=cursor.fetchone()
         print(post,'---------')
         if post is None:
             raise HTTPException(status_code=404, detail="Item not found")

@@ -3,7 +3,7 @@ from fastapi import FastAPI, Response, status, HTTPException
 from fastapi.params import Body
 
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 
 from random import randrange
 
@@ -14,7 +14,7 @@ import psycopg2
 import time
 from datetime import datetime
 
-from . import models
+from . import models, schemas
 from . import database
 from .database import SessionLocal, engine, get_db
 from sqlalchemy.orm import Session
@@ -81,10 +81,10 @@ async def root():
     return {"message": "Hello Worldss"}
 
 
-@app.get('/post/')
+@app.get('/post/',response_model=List[schemas.PostOut])
 async def payload(db: Session = Depends(get_db)):
     try:
-        print(payload,'---------')
+        # print(payload,'---------')
         # return {"DATA":'teststst',"status":200,'message':'success','data':payload.get('time')}
 
         # cursor.execute("SELECT * FROM posts")
@@ -94,17 +94,19 @@ async def payload(db: Session = Depends(get_db)):
         
         print(posts,'---------')
 
-        return {"posts":posts}
+        # return {"posts":posts}
+        return posts
     except Exception as e:
-        print("error------->>>> ",e)
-        return {"posts":e}
+        print("ERROR")
+        # print("error------->>>> ",e)
+        # return {"posts":e}
 
 
 
 
 # USING DATABASE POST
-@app.post('/post/',status_code=201)
-async def createpost(post: Post,db: Session = Depends(get_db)):
+@app.post('/post/',status_code=201,response_model=schemas.PostOut)
+async def createpost(post: schemas.Post,db: Session = Depends(get_db)):
     try:
         print(post,'---------')
         
@@ -122,7 +124,8 @@ async def createpost(post: Post,db: Session = Depends(get_db)):
         db.commit()
         db.refresh(new_post)
 
-        return {"DATA":'teststst',"status":200,'message':'success','dataa':new_post}
+        # return {"DATA":'teststst',"status":200,'message':'success','dataa':new_post}
+        return new_post
 
 
         # cursor.execute("SELECT * FROM posts")
@@ -137,7 +140,7 @@ async def createpost(post: Post,db: Session = Depends(get_db)):
 
 
 
-@app.get('/post/{id}')
+@app.get('/post/{id}',response_model=schemas.PostOut)
 async def get_post(id: int, response: Response,db: Session = Depends(get_db)):
     print(id,'---------')
 
@@ -150,7 +153,9 @@ async def get_post(id: int, response: Response,db: Session = Depends(get_db)):
         # print(post,'---------')
         if post is None:
             raise HTTPException(status_code=404, detail="Item not found")
-        return {"DATA":'teststst',"status":200,'message':'success','data':post}
+        
+        # return {"DATA":'teststst',"status":200,'message':'success','data':post}
+        return post
     except Exception as e:
         print(e)
         return {"DATA":'teststst',"status":500,'message':'error','dataa':e}   
@@ -168,15 +173,20 @@ def find_post(id):
 
 
 
-@app.get('/posts/latest')
-def get_latest_posts():
-    latest_posts = dummy_posts[-1:-4:-1]
-    return {"DATA":'teststst',"status":200,'message':'success','data':latest_posts}
+@app.get('/posts/latest',response_model=schemas.PostOut)
+def get_latest_posts(db: Session = Depends(get_db)):
+    # latest_posts = dummy_posts[-1:-4:-1]
+    try:
+        latest_posts = db.query(models.NewPost).order_by(models.NewPost.created_at.desc()).limit(10).all()
+    # return {"DATA":'teststst',"status":200,'message':'success','data':latest_posts}
+        return latest_posts
+    except Exception as e:
+        print('error---\n\n\n\n\---->>>> ',e)
 
 
 
 
-@app.delete('/post/{id}')
+@app.delete('/post/{id}', status_code=204)
 def delete_post(id: int,db: Session = Depends(get_db)):
     print(id,'---------')
     try:
@@ -209,8 +219,8 @@ def delete_post(id: int,db: Session = Depends(get_db)):
 
 
 
-@app.put('/post/{id}')
-def update_post(id: int, update_post: Post,db: Session = Depends(get_db)):
+@app.put('/post/{id}',response_model=schemas.PostOut)
+def update_post(id: int, update_post: schemas.Post,db: Session = Depends(get_db)):
     print(id,'---------')
     
     try:
@@ -235,7 +245,8 @@ def update_post(id: int, update_post: Post,db: Session = Depends(get_db)):
         if post is None:
             raise HTTPException(status_code=404, detail="Item not found")
             
-        return {"DATA":'teststst',"status":200,'message':'success','data':post}
+        # return {"DATA":'teststst',"status":200,'message':'success','data':post}
+        return post
     except Exception as e:
         print(e)
         return {"DATA":'teststst',"status":500,'message':'error','dataa':e}
